@@ -237,8 +237,25 @@
             <h3></h3>
             <p class="status-meta"></p>
           </div>
-          <button type="button" class="ghost-button remove-budget">Remove</button>
+          <div class="status-actions">
+            <button type="button" class="ghost-button edit-budget">Edit</button>
+            <button type="button" class="ghost-button remove-budget">Remove</button>
+          </div>
         </div>
+        <form class="budget-edit-form stack" hidden>
+          <label>
+            Category
+            <input type="text" name="category" required />
+          </label>
+          <label>
+            Monthly limit
+            <input type="number" name="limit" min="0" step="0.01" required />
+          </label>
+          <div class="status-actions">
+            <button type="submit" class="primary-button">Save changes</button>
+            <button type="button" class="ghost-button cancel-edit-budget">Cancel</button>
+          </div>
+        </form>
         <div class="meter">
           <div class="meter-fill"></div>
         </div>
