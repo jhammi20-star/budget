@@ -400,10 +400,23 @@ select:focus {
   font-size: 1.02rem;
 }
 
+.status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
 .status-meta,
 .transaction-meta,
 .form-hint {
   font-size: 0.92rem;
+}
+
+.budget-edit-form {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
 }
 
 .meter {
@@ -508,7 +521,8 @@ select:disabled {
   .transaction-item,
   .transaction-actions,
   .hero-fact,
-  .integration-actions {
+  .integration-actions,
+  .status-actions {
     align-items: start;
     flex-direction: column;
   }

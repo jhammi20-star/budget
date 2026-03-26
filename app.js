@@ -138,7 +138,21 @@ transactionForm.addEventListener("submit", (event) => {
 budgetStatusList.addEventListener("click", (event) => {
   const target = event.target;
 
-  if (!(target instanceof HTMLElement) || !target.matches(".remove-budget")) {
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  if (target.matches(".edit-budget")) {
+    toggleBudgetEditForm(target.dataset.id, true);
+    return;
+  }
+
+  if (target.matches(".cancel-edit-budget")) {
+    toggleBudgetEditForm(target.dataset.id, false);
+    return;
+  }
+
+  if (!target.matches(".remove-budget")) {
     return;
   }
 
@@ -149,6 +163,26 @@ budgetStatusList.addEventListener("click", (event) => {
   });
   persistState();
   render();
+});
+
+budgetStatusList.addEventListener("submit", (event) => {
+  const target = event.target;
+
+  if (!(target instanceof HTMLFormElement) || !target.matches(".budget-edit-form")) {
+    return;
+  }
+
+  event.preventDefault();
+
+  const budgetId = target.dataset.id;
+  const categoryInput = target.elements.namedItem("category");
+  const limitInput = target.elements.namedItem("limit");
+
+  if (!(categoryInput instanceof HTMLInputElement) || !(limitInput instanceof HTMLInputElement)) {
+    return;
+  }
+
+  saveBudgetEdits(budgetId, categoryInput.value, limitInput.value);
 });
 
 transactionList.addEventListener("click", (event) => {
@@ -320,6 +354,11 @@ function renderStatusCards() {
     const title = fragment.querySelector("h3");
     const meta = fragment.querySelector(".status-meta");
     const meterFill = fragment.querySelector(".meter-fill");
+    const editForm = fragment.querySelector(".budget-edit-form");
+    const categoryField = fragment.querySelector('input[name="category"]');
+    const limitField = fragment.querySelector('input[name="limit"]');
+    const editButton = fragment.querySelector(".edit-budget");
+    const cancelEditButton = fragment.querySelector(".cancel-edit-budget");
     const removeButton = fragment.querySelector(".remove-budget");
 
     title.textContent = budget.category;
@@ -333,6 +372,11 @@ function renderStatusCards() {
       )} over`;
     }
 
+    editForm.dataset.id = budget.id;
+    categoryField.value = budget.category;
+    limitField.value = budget.limit.toFixed(2);
+    editButton.dataset.id = budget.id;
+    cancelEditButton.dataset.id = budget.id;
     removeButton.dataset.id = budget.id;
     removeButton.dataset.category = budget.category;
     card.dataset.id = budget.id;
@@ -534,6 +578,71 @@ function emptyState(message) {
   element.className = "empty-state";
   element.textContent = message;
   return element;
+}
+
+function toggleBudgetEditForm(id, isOpen) {
+  const card = budgetStatusList.querySelector(`.status-card[data-id="${id}"]`);
+
+  if (!(card instanceof HTMLElement)) {
+    return;
+  }
+
+  const form = card.querySelector(".budget-edit-form");
+  const editButton = card.querySelector(".edit-budget");
+
+  if (!(form instanceof HTMLFormElement) || !(editButton instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  form.hidden = !isOpen;
+  editButton.disabled = isOpen;
+
+  if (isOpen) {
+    const categoryInput = form.elements.namedItem("category");
+
+    if (categoryInput instanceof HTMLInputElement) {
+      categoryInput.focus();
+      categoryInput.select();
+    }
+  }
+}
+
+function saveBudgetEdits(budgetId, nextCategoryValue, nextLimitValue) {
+  const category = nextCategoryValue.trim();
+  const limit = parseCurrency(nextLimitValue);
+  const budget = state.budgets.find((item) => item.id === budgetId);
+
+  if (!budget || !category || limit <= 0) {
+    return;
+  }
+
+  const duplicate = state.budgets.some((item) => {
+    return item.id !== budgetId && item.category.toLowerCase() === category.toLowerCase();
+  });
+
+  if (duplicate) {
+    return;
+  }
+
+  const previousCategory = budget.category;
+  budget.category = category;
+  budget.limit = limit;
+
+  if (previousCategory !== category) {
+    state.transactions = state.transactions.map((transaction) => {
+      if (transaction.category !== previousCategory) {
+        return transaction;
+      }
+
+      return {
+        ...transaction,
+        category,
+      };
+    });
+  }
+
+  persistState();
+  render();
 }
 
 async function hydrateRemoteState() {
