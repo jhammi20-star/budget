@@ -1,0 +1,11 @@
+{
+  "name": "budget-compass-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check functions/create-link-token.mjs && node --check functions/exchange-public-token.mjs && node --check functions/sync-transactions.mjs"
+  },
+  "dependencies": {
+    "plaid": "^33.0.0"
+  }
+}

@@ -314,6 +314,39 @@ select:focus {
   gap: 14px;
 }
 
+.integration-panel {
+  min-height: 100%;
+}
+
+.integration-status {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(244, 249, 247, 0.9));
+}
+
+.integration-label {
+  margin: 0 0 8px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.integration-status strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 1.15rem;
+}
+
+.integration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .summary-tile {
   padding: 18px;
   border-radius: 24px;
@@ -461,7 +494,8 @@ select:disabled {
   .status-header,
   .transaction-item,
   .transaction-actions,
-  .hero-fact {
+  .hero-fact,
+  .integration-actions {
     align-items: start;
     flex-direction: column;
   }

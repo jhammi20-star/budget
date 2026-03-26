@@ -1,7 +1,15 @@
 const STORAGE_KEY = "budget-compass-state";
+const API_BASE_URL = window.BUDGET_API_BASE_URL || "";
 
 const defaultState = {
   income: 0,
+  integration: {
+    connected: false,
+    institutionName: "",
+    lastSyncAt: "",
+    linkTokenReady: false,
+    syncError: "",
+  },
   budgets: [
     { id: crypto.randomUUID(), category: "Housing", limit: 1600 },
     { id: crypto.randomUUID(), category: "Groceries", limit: 600 },
@@ -39,6 +47,8 @@ const transactionCategoryHint = document.querySelector("#transactionCategoryHint
 const transactionAmountInput = document.querySelector("#transactionAmount");
 const transactionDateInput = document.querySelector("#transactionDate");
 const transactionSubmit = document.querySelector("#transactionSubmit");
+const connectAccountButton = document.querySelector("#connectAccountButton");
+const syncTransactionsButton = document.querySelector("#syncTransactionsButton");
 
 const incomeValue = document.querySelector("#incomeValue");
 const budgetedValue = document.querySelector("#budgetedValue");
@@ -49,6 +59,8 @@ const monthLabel = document.querySelector("#monthLabel");
 const activeBudgetCount = document.querySelector("#activeBudgetCount");
 const transactionCount = document.querySelector("#transactionCount");
 const topCategoryValue = document.querySelector("#topCategoryValue");
+const integrationStatusTitle = document.querySelector("#integrationStatusTitle");
+const integrationStatusText = document.querySelector("#integrationStatusText");
 const budgetStatusList = document.querySelector("#budgetStatusList");
 const transactionList = document.querySelector("#transactionList");
 const statusTemplate = document.querySelector("#statusTemplate");
@@ -144,10 +156,19 @@ transactionList.addEventListener("click", (event) => {
   render();
 });
 
+connectAccountButton.addEventListener("click", async () => {
+  await handleConnectAccount();
+});
+
+syncTransactionsButton.addEventListener("click", async () => {
+  await handleSyncTransactions();
+});
+
 render();
 
 function render() {
   renderOverview();
+  renderIntegration();
   renderCategoryOptions();
   renderSummary();
   renderStatusCards();
@@ -159,6 +180,42 @@ function renderOverview() {
   activeBudgetCount.textContent = String(state.budgets.length);
   transactionCount.textContent = String(state.transactions.length);
   topCategoryValue.textContent = topSpendingCategoryLabel();
+}
+
+function renderIntegration() {
+  if (!API_BASE_URL) {
+    connectAccountButton.disabled = true;
+    syncTransactionsButton.disabled = true;
+    integrationStatusTitle.textContent = "Local-only mode";
+    integrationStatusText.textContent =
+      "Set window.BUDGET_API_BASE_URL and deploy the Plaid backend to enable account sync.";
+    return;
+  }
+
+  connectAccountButton.disabled = false;
+  syncTransactionsButton.disabled = !state.integration.connected;
+
+  if (state.integration.connected) {
+    integrationStatusTitle.textContent = state.integration.institutionName
+      ? `Connected to ${state.integration.institutionName}`
+      : "Account connected";
+    integrationStatusText.textContent = state.integration.lastSyncAt
+      ? `Last sync ${formatTimestamp(state.integration.lastSyncAt)}. Use sync to pull any new transactions.`
+      : "Connection is active. Run a sync to pull the first set of transactions.";
+    return;
+  }
+
+  if (state.integration.linkTokenReady) {
+    integrationStatusTitle.textContent = "Plaid Link ready";
+    integrationStatusText.textContent =
+      "Your backend can now hand Plaid Link to the browser. Complete the public-token exchange before syncing.";
+    return;
+  }
+
+  integrationStatusTitle.textContent = "Ready to connect";
+  integrationStatusText.textContent = state.integration.syncError
+    ? state.integration.syncError
+    : "Use Plaid Link to authorize your institution and import transactions.";
 }
 
 function renderCategoryOptions() {
@@ -310,6 +367,16 @@ function currentMonthLabel() {
   });
 }
 
+function formatTimestamp(timestamp) {
+  return new Date(timestamp).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function topSpendingCategoryLabel() {
   if (state.transactions.length === 0) {
     return "None yet";
@@ -325,6 +392,85 @@ function topSpendingCategoryLabel() {
   })[0];
 
   return `${category} ${formatCurrency(total)}`;
+}
+
+async function handleConnectAccount() {
+  if (!API_BASE_URL) {
+    return;
+  }
+
+  connectAccountButton.disabled = true;
+  integrationStatusTitle.textContent = "Preparing secure connection";
+  integrationStatusText.textContent = "Requesting a Plaid Link token from your backend.";
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/plaid/link-token`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        clientName: "Budget Compass",
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Unable to create a link token.");
+    }
+
+    const data = await response.json();
+    state.integration.linkTokenReady = Boolean(data.linkToken);
+    state.integration.syncError = "";
+    persistState();
+    render();
+  } catch (error) {
+    state.integration.syncError =
+      error instanceof Error ? error.message : "Connection failed. Check the API configuration.";
+    persistState();
+    render();
+  }
+}
+
+async function handleSyncTransactions() {
+  if (!API_BASE_URL || !state.integration.connected) {
+    return;
+  }
+
+  syncTransactionsButton.disabled = true;
+  integrationStatusTitle.textContent = "Syncing transactions";
+  integrationStatusText.textContent = "Pulling the latest transaction batch from the connected account.";
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/plaid/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Unable to sync transactions.");
+    }
+
+    const data = await response.json();
+    const imported = Array.isArray(data.added) ? data.added : [];
+
+    imported.reverse().forEach((transaction) => {
+      if (!state.transactions.some((item) => item.id === transaction.id)) {
+        state.transactions.unshift(transaction);
+      }
+    });
+
+    state.integration.lastSyncAt = new Date().toISOString();
+    state.integration.syncError = "";
+    persistState();
+    render();
+  } catch (error) {
+    state.integration.syncError =
+      error instanceof Error ? error.message : "Sync failed. Check your backend logs.";
+    persistState();
+    render();
+  }
 }
 
 function emptyState(message) {
