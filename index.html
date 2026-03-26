@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Budget Compass</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Household Budget Hub</p>
+          <h1>Keep spending visible before it turns into drift.</h1>
+          <p class="hero-text">
+            Track income, plan category limits, and log transactions in one
+            place. Everything is saved in your browser.
+          </p>
+        </div>
+        <div class="hero-panel">
+          <div class="hero-metric">
+            <span>Monthly plan</span>
+            <strong id="heroNet">$0.00</strong>
+          </div>
+          <p>
+            Positive means the current budget still has room. Negative means the
+            plan is overspent.
+          </p>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="card card-form">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Setup</p>
+              <h2>Monthly income</h2>
+            </div>
+          </div>
+          <form id="incomeForm" class="stack">
+            <label>
+              Monthly take-home income
+              <input
+                type="number"
+                id="incomeInput"
+                min="0"
+                step="0.01"
+                placeholder="5000"
+                required
+              />
+            </label>
+            <button type="submit" class="primary-button">Save income</button>
+          </form>
+        </section>
+
+        <section class="card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Snapshot</p>
+              <h2>This month</h2>
+            </div>
+          </div>
+          <div class="summary-grid">
+            <article class="summary-tile">
+              <span>Income</span>
+              <strong id="incomeValue">$0.00</strong>
+            </article>
+            <article class="summary-tile">
+              <span>Budgeted</span>
+              <strong id="budgetedValue">$0.00</strong>
+            </article>
+            <article class="summary-tile">
+              <span>Spent</span>
+              <strong id="spentValue">$0.00</strong>
+            </article>
+            <article class="summary-tile">
+              <span>Remaining</span>
+              <strong id="remainingValue">$0.00</strong>
+            </article>
+          </div>
+        </section>
+
+        <section class="card card-form">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Plan</p>
+              <h2>Category budgets</h2>
+            </div>
+          </div>
+          <form id="budgetForm" class="stack">
+            <label>
+              Category
+              <input type="text" id="budgetCategory" placeholder="Groceries" required />
+            </label>
+            <label>
+              Monthly limit
+              <input
+                type="number"
+                id="budgetLimit"
+                min="0"
+                step="0.01"
+                placeholder="600"
+                required
+              />
+            </label>
+            <button type="submit" class="primary-button">Add budget</button>
+          </form>
+        </section>
+
+        <section class="card card-form">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Track</p>
+              <h2>Transactions</h2>
+            </div>
+          </div>
+          <form id="transactionForm" class="stack">
+            <label>
+              Description
+              <input type="text" id="transactionDescription" placeholder="Trader Joe's" required />
+            </label>
+            <label>
+              Category
+              <select id="transactionCategory" required></select>
+            </label>
+            <p id="transactionCategoryHint" class="form-hint"></p>
+            <label>
+              Amount
+              <input
+                type="number"
+                id="transactionAmount"
+                min="0"
+                step="0.01"
+                placeholder="84.50"
+                required
+              />
+            </label>
+            <label>
+              Date
+              <input type="date" id="transactionDate" required />
+            </label>
+            <button type="submit" id="transactionSubmit" class="primary-button">Add transaction</button>
+          </form>
+        </section>
+
+        <section class="card wide-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Progress</p>
+              <h2>Budget status by category</h2>
+            </div>
+          </div>
+          <div id="budgetStatusList" class="status-list"></div>
+        </section>
+
+        <section class="card wide-card">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Activity</p>
+              <h2>Recent transactions</h2>
+            </div>
+          </div>
+          <div id="transactionList" class="transaction-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="statusTemplate">
+      <article class="status-card">
+        <div class="status-header">
+          <div>
+            <h3></h3>
+            <p class="status-meta"></p>
+          </div>
+          <button type="button" class="ghost-button remove-budget">Remove</button>
+        </div>
+        <div class="meter">
+          <div class="meter-fill"></div>
+        </div>
+      </article>
+    </template>
+
+    <template id="transactionTemplate">
+      <article class="transaction-item">
+        <div>
+          <h3></h3>
+          <p class="transaction-meta"></p>
+        </div>
+        <div class="transaction-actions">
+          <strong></strong>
+          <button type="button" class="ghost-button remove-transaction">Delete</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
