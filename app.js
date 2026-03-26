@@ -127,6 +127,9 @@ const statusTemplate = document.querySelector("#statusTemplate");
 const transactionTemplate = document.querySelector("#transactionTemplate");
 const authStatus = document.querySelector("#authStatus");
 const authButton = document.querySelector("#authButton");
+const authGate = document.querySelector("#authGate");
+const authGateButton = document.querySelector("#authGateButton");
+const appShell = document.querySelector("#appShell");
 let plaidHandler = null;
 let authSession = loadAuthSession();
 
@@ -276,6 +279,10 @@ authButton.addEventListener("click", async () => {
   await signIn();
 });
 
+authGateButton.addEventListener("click", async () => {
+  await signIn();
+});
+
 consumeAuthRedirect();
 render();
 hydrateSharedBudgetState();
@@ -293,8 +300,11 @@ function render() {
 
 function renderAuth() {
   authButton.disabled = false;
+  authGateButton.disabled = false;
 
   if (isAuthenticated()) {
+    authGate.hidden = true;
+    appShell.hidden = false;
     authStatus.textContent = authSession.email
       ? `Signed in as ${authSession.email}`
       : "Signed in";
@@ -302,11 +312,14 @@ function renderAuth() {
     return;
   }
 
+  authGate.hidden = false;
+  appShell.hidden = true;
   authStatus.textContent = AUTH_CONFIG.userPoolDomain
-    ? "Sign in to sync institution data across devices."
-    : "Signed out. Local budgeting still works.";
+    ? "Sign in required"
+    : "Authentication is not configured.";
   authButton.textContent = "Sign in";
   authButton.disabled = !AUTH_CONFIG.userPoolDomain;
+  authGateButton.disabled = !AUTH_CONFIG.userPoolDomain;
 }
 
 function renderOverview() {

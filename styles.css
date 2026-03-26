@@ -53,6 +53,41 @@ select {
   font: inherit;
 }
 
+.auth-gate {
+  width: min(720px, calc(100% - 32px));
+  min-height: 100vh;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  padding: 32px 0;
+}
+
+.auth-gate-card {
+  width: 100%;
+  padding: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  background: var(--panel);
+  backdrop-filter: blur(18px);
+  border-radius: 30px;
+  box-shadow: var(--shadow);
+}
+
+.auth-gate-card h1 {
+  margin: 12px 0 14px;
+  max-width: 14ch;
+  font-size: clamp(2.3rem, 4vw, 4rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+
+.auth-gate-text {
+  max-width: 44ch;
+  margin: 0 0 24px;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
 .page-shell {
   position: relative;
   width: min(1180px, calc(100% - 32px));
@@ -495,6 +530,15 @@ select:disabled {
 }
 
 @media (max-width: 560px) {
+  .auth-gate {
+    width: min(100% - 20px, 720px);
+  }
+
+  .auth-gate-card {
+    padding: 24px;
+    border-radius: 24px;
+  }
+
   .page-shell {
     width: min(100% - 20px, 1180px);
     padding-top: 18px;

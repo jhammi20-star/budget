@@ -15,7 +15,19 @@
     <script src="./config.js"></script>
   </head>
   <body>
-    <div class="page-shell">
+    <section id="authGate" class="auth-gate" hidden>
+      <div class="auth-gate-card">
+        <p class="eyebrow">Budget Compass</p>
+        <h1>Sign in to open your family budget workspace.</h1>
+        <p class="auth-gate-text">
+          The full dashboard is now protected behind Cognito sign-in, including shared budget edits
+          and connected account sync.
+        </p>
+        <button type="button" id="authGateButton" class="primary-button">Sign in to continue</button>
+      </div>
+    </section>
+
+    <div id="appShell" class="page-shell">
       <div class="topbar">
         <div>
           <p class="eyebrow">Budget Compass</p>
