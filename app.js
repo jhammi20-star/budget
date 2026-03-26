@@ -1,7 +1,7 @@
 const STORAGE_KEY = "budget-compass-state";
-const USER_ID_KEY = "budget-compass-user-id";
+const AUTH_STORAGE_KEY = "budget-compass-auth";
 const API_BASE_URL = window.BUDGET_API_BASE_URL || "";
-const USER_ID = getOrCreateUserId();
+const AUTH_CONFIG = window.BUDGET_AUTH || {};
 
 const defaultState = {
   income: 0,
@@ -69,7 +69,10 @@ const budgetStatusList = document.querySelector("#budgetStatusList");
 const transactionList = document.querySelector("#transactionList");
 const statusTemplate = document.querySelector("#statusTemplate");
 const transactionTemplate = document.querySelector("#transactionTemplate");
+const authStatus = document.querySelector("#authStatus");
+const authButton = document.querySelector("#authButton");
 let plaidHandler = null;
+let authSession = loadAuthSession();
 
 incomeInput.value = state.income || "";
 transactionDateInput.value = currentDateString();
@@ -169,16 +172,45 @@ syncTransactionsButton.addEventListener("click", async () => {
   await handleSyncTransactions();
 });
 
+authButton.addEventListener("click", async () => {
+  if (isAuthenticated()) {
+    signOut();
+    return;
+  }
+
+  await signIn();
+});
+
+consumeAuthRedirect();
 render();
 hydrateRemoteState();
 
 function render() {
   renderOverview();
+  renderAuth();
   renderIntegration();
   renderCategoryOptions();
   renderSummary();
   renderStatusCards();
   renderTransactions();
+}
+
+function renderAuth() {
+  authButton.disabled = false;
+
+  if (isAuthenticated()) {
+    authStatus.textContent = authSession.email
+      ? `Signed in as ${authSession.email}`
+      : "Signed in";
+    authButton.textContent = "Sign out";
+    return;
+  }
+
+  authStatus.textContent = AUTH_CONFIG.userPoolDomain
+    ? "Sign in to sync institution data across devices."
+    : "Signed out. Local budgeting still works.";
+  authButton.textContent = "Sign in";
+  authButton.disabled = !AUTH_CONFIG.userPoolDomain;
 }
 
 function renderOverview() {
@@ -195,6 +227,15 @@ function renderIntegration() {
     integrationStatusTitle.textContent = "Local-only mode";
     integrationStatusText.textContent =
       "Set window.BUDGET_API_BASE_URL and deploy the Plaid backend to enable account sync.";
+    return;
+  }
+
+  if (!isAuthenticated()) {
+    connectAccountButton.disabled = true;
+    syncTransactionsButton.disabled = true;
+    integrationStatusTitle.textContent = "Sign in required";
+    integrationStatusText.textContent =
+      "Use Cognito sign-in before connecting Plaid or loading synced transactions.";
     return;
   }
 
@@ -423,11 +464,10 @@ async function handleConnectAccount() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Budget-User": USER_ID,
+        ...authorizedHeaders(),
       },
       body: JSON.stringify({
         clientName: "Budget Compass",
-        userId: USER_ID,
       }),
     });
 
@@ -465,7 +505,7 @@ async function handleSyncTransactions() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Budget-User": USER_ID,
+        ...authorizedHeaders(),
       },
     });
 
@@ -497,14 +537,14 @@ function emptyState(message) {
 }
 
 async function hydrateRemoteState() {
-  if (!API_BASE_URL) {
+  if (!API_BASE_URL || !isAuthenticated()) {
     return;
   }
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/plaid/state`, {
       headers: {
-        "X-Budget-User": USER_ID,
+        ...authorizedHeaders(),
       },
     });
 
@@ -557,7 +597,7 @@ async function exchangePublicToken(publicToken, metadata) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Budget-User": USER_ID,
+      ...authorizedHeaders(),
     },
     body: JSON.stringify({
       publicToken,
@@ -593,14 +633,103 @@ function mergeImportedTransactions(transactions) {
     .slice(0, 250);
 }
 
-function getOrCreateUserId() {
-  const saved = localStorage.getItem(USER_ID_KEY);
+function loadAuthSession() {
+  try {
+    const saved = localStorage.getItem(AUTH_STORAGE_KEY);
 
-  if (saved) {
-    return saved;
+    if (!saved) {
+      return null;
+    }
+
+    const parsed = JSON.parse(saved);
+
+    if (!parsed.idToken || !parsed.expiresAt || Number(parsed.expiresAt) < Date.now()) {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function isAuthenticated() {
+  return Boolean(authSession?.idToken && authSession.expiresAt > Date.now());
+}
+
+function authorizedHeaders() {
+  if (!isAuthenticated()) {
+    return {};
   }
 
-  const generated = crypto.randomUUID();
-  localStorage.setItem(USER_ID_KEY, generated);
-  return generated;
+  return {
+    Authorization: `Bearer ${authSession.idToken}`,
+  };
+}
+
+async function signIn() {
+  if (!AUTH_CONFIG.userPoolDomain || !AUTH_CONFIG.clientId) {
+    return;
+  }
+
+  const redirectUri = AUTH_CONFIG.redirectUri || window.location.origin;
+  const authorizeUrl = new URL(`https://${AUTH_CONFIG.userPoolDomain}/login`);
+  authorizeUrl.searchParams.set("client_id", AUTH_CONFIG.clientId);
+  authorizeUrl.searchParams.set("response_type", "token");
+  authorizeUrl.searchParams.set("scope", "openid email profile");
+  authorizeUrl.searchParams.set("redirect_uri", redirectUri);
+  window.location.assign(authorizeUrl.toString());
+}
+
+function signOut() {
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+  authSession = null;
+  state.integration.connected = false;
+  state.integration.accessReady = false;
+  state.integration.institutionName = "";
+  state.integration.lastSyncAt = "";
+  state.integration.linkTokenReady = false;
+  state.integration.linkToken = "";
+  state.integration.syncError = "";
+  persistState();
+  render();
+
+  if (!AUTH_CONFIG.userPoolDomain || !AUTH_CONFIG.clientId) {
+    return;
+  }
+
+  const logoutUrl = new URL(`https://${AUTH_CONFIG.userPoolDomain}/logout`);
+  logoutUrl.searchParams.set("client_id", AUTH_CONFIG.clientId);
+  logoutUrl.searchParams.set("logout_uri", AUTH_CONFIG.logoutUri || window.location.origin);
+  window.location.assign(logoutUrl.toString());
+}
+
+function consumeAuthRedirect() {
+  if (!window.location.hash.startsWith("#")) {
+    return;
+  }
+
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const idToken = params.get("id_token");
+
+  if (!idToken) {
+    return;
+  }
+
+  const payload = parseJwt(idToken);
+  authSession = {
+    idToken,
+    email: payload.email || "",
+    expiresAt: Number(payload.exp || 0) * 1000,
+  };
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authSession));
+  window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+}
+
+function parseJwt(token) {
+  const [, payload] = token.split(".");
+  const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), "=");
+  return JSON.parse(atob(padded));
 }

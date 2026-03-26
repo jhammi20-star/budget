@@ -1,4 +1,5 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 import {
   BatchWriteCommand,
   DeleteCommand,
@@ -7,11 +8,21 @@ import {
   PutCommand,
   QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const db = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const secrets = new SecretsManagerClient({});
 const tableName = process.env.TABLE_NAME;
 const plaidEnvironment = process.env.PLAID_ENV || "sandbox";
 const plaidBaseUrl = `https://${plaidEnvironment}.plaid.com`;
+const cognitoRegion = process.env.COGNITO_REGION;
+const cognitoUserPoolId = process.env.COGNITO_USER_POOL_ID;
+const cognitoClientId = process.env.COGNITO_CLIENT_ID;
+const cognitoIssuer = cognitoRegion && cognitoUserPoolId
+  ? `https://cognito-idp.${cognitoRegion}.amazonaws.com/${cognitoUserPoolId}`
+  : "";
+const jwks = cognitoIssuer ? createRemoteJWKSet(new URL(`${cognitoIssuer}/.well-known/jwks.json`)) : null;
+let plaidConfigCache = null;
 
 export async function handler(event) {
   const method = event.requestContext?.http?.method || event.httpMethod;
@@ -48,7 +59,7 @@ export async function handler(event) {
 }
 
 async function getState(event) {
-  const userId = readUserId(event);
+  const userId = await readUserId(event);
   const profile = await getProfile(userId);
   const transactions = await listTransactions(userId);
 
@@ -63,7 +74,7 @@ async function getState(event) {
 async function createLinkToken(event) {
   requirePlaidConfig();
   const body = readJsonBody(event);
-  const userId = readUserId(event);
+  const userId = await readUserId(event);
 
   const response = await plaidRequest("/link/token/create", {
     client_name: body.clientName || "Budget Compass",
@@ -83,7 +94,7 @@ async function createLinkToken(event) {
 async function exchangePublicToken(event) {
   requirePlaidConfig();
   const body = readJsonBody(event);
-  const userId = readUserId(event);
+  const userId = await readUserId(event);
 
   if (!body.publicToken) {
     return jsonResponse(400, { error: "Missing publicToken." });
@@ -119,7 +130,7 @@ async function exchangePublicToken(event) {
 
 async function syncTransactions(event) {
   requirePlaidConfig();
-  const userId = readUserId(event);
+  const userId = await readUserId(event);
   const profile = await getProfile(userId);
 
   if (!profile?.accessToken) {
@@ -270,14 +281,28 @@ async function listTransactions(userId) {
     .sort((left, right) => new Date(right.date) - new Date(left.date));
 }
 
-function readUserId(event) {
-  const userId = event.headers?.["x-budget-user"] || event.headers?.["X-Budget-User"];
+async function readUserId(event) {
+  const authorization = event.headers?.authorization || event.headers?.Authorization;
 
-  if (!userId) {
-    throw new Error("Missing X-Budget-User header.");
+  if (!authorization?.startsWith("Bearer ")) {
+    throw new Error("Missing Authorization bearer token.");
   }
 
-  return userId;
+  if (!jwks || !cognitoIssuer || !cognitoClientId) {
+    throw new Error("Missing Cognito backend configuration.");
+  }
+
+  const token = authorization.slice("Bearer ".length);
+  const { payload } = await jwtVerify(token, jwks, {
+    issuer: cognitoIssuer,
+    audience: cognitoClientId,
+  });
+
+  if (!payload.sub) {
+    throw new Error("Authenticated token is missing sub.");
+  }
+
+  return payload.sub;
 }
 
 function readJsonBody(event) {
@@ -293,20 +318,21 @@ function normalizePath(path) {
 }
 
 function requirePlaidConfig() {
-  if (!process.env.PLAID_CLIENT_ID || !process.env.PLAID_SECRET || !tableName) {
+  if (!process.env.PLAID_SECRET_NAME || !tableName) {
     throw new Error("Missing backend configuration for Plaid or DynamoDB.");
   }
 }
 
 async function plaidRequest(path, body) {
+  const config = await getPlaidConfig();
   const response = await fetch(`${plaidBaseUrl}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      client_id: process.env.PLAID_CLIENT_ID,
-      secret: process.env.PLAID_SECRET,
+      client_id: config.clientId,
+      secret: config.secret,
       ...body,
     }),
   });
@@ -318,6 +344,27 @@ async function plaidRequest(path, body) {
   }
 
   return data;
+}
+
+async function getPlaidConfig() {
+  if (plaidConfigCache) {
+    return plaidConfigCache;
+  }
+
+  const response = await secrets.send(
+    new GetSecretValueCommand({
+      SecretId: process.env.PLAID_SECRET_NAME,
+    }),
+  );
+
+  const parsed = JSON.parse(response.SecretString || "{}");
+
+  if (!parsed.clientId || !parsed.secret) {
+    throw new Error("Plaid secret payload is missing clientId or secret.");
+  }
+
+  plaidConfigCache = parsed;
+  return plaidConfigCache;
 }
 
 function chunked(items, size) {
@@ -335,7 +382,7 @@ function jsonResponse(statusCode, body) {
     statusCode,
     headers: {
       "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "Content-Type,X-Budget-User",
+      "Access-Control-Allow-Headers": "Authorization,Content-Type",
       "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
       "Content-Type": "application/json",
     },
