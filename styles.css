@@ -228,6 +228,7 @@ label,
 
 .card {
   padding: 24px;
+  overflow: hidden;
 }
 
 .wide-card {
@@ -321,7 +322,7 @@ select:focus {
 }
 
 .integration-panel {
-  min-height: 100%;
+  align-content: start;
 }
 
 .integration-status {
@@ -351,6 +352,7 @@ select:focus {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  align-items: center;
 }
 
 .summary-tile {
