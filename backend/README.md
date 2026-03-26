@@ -1,33 +1,40 @@
-# Backend Scaffold
+# Backend
 
-This folder is a starting point for a Plaid-backed transaction sync service.
+This backend is now designed to run as a single Lambda behind an HTTP API.
 
-## What it contains
+## Files
 
-- `functions/create-link-token.mjs`: creates a Plaid Link token for the frontend
-- `functions/exchange-public-token.mjs`: exchanges the short-lived public token for an access token
-- `functions/sync-transactions.mjs`: pulls transactions with `transactionsSync`
-- `shared/normalize-transaction.mjs`: maps Plaid data into the app's transaction format
+- `src/handler.mjs`: route handler for state, link-token creation, public-token exchange, and transaction sync
+- `deploy.sh`: creates or updates DynamoDB, IAM, Lambda, and API Gateway
+- `iam-trust-policy.json`: trust policy for the Lambda execution role
 
-## What still needs to happen
+## Data model
 
-1. Install dependencies with `npm install` inside `backend/`
-2. Store Plaid secrets in Lambda or your server environment
-3. Persist the returned Plaid `accessToken` securely
-4. Persist the Plaid sync cursor per connected account
-5. Save synced transactions in DynamoDB instead of only browser storage
-6. Expose these handlers behind API Gateway or Amplify server functions
-7. Set `window.BUDGET_API_BASE_URL` in the frontend so [`app.js`](../app.js) can call the API
+Everything is stored in one DynamoDB table:
 
-## Recommended AWS shape
+- `userId` as the partition key
+- `sk=PROFILE` for Plaid item state, access token, institution name, and sync cursor
+- `sk=TXN#<transactionId>` for imported transactions
 
-- Amplify Hosting for the frontend
-- API Gateway + Lambda for Plaid endpoints
-- DynamoDB for users, items, cursors, and imported transactions
-- Secrets Manager or Lambda environment variables for Plaid credentials
+## Deployment
 
-## Important note
+Set these environment variables before running the deploy script:
 
-Do not return or store Plaid `accessToken` values in the browser in production.
-The sample `exchange-public-token` handler returns it only to show the integration step.
-In a real deployment, store it server-side and associate it with the signed-in user.
+- `PLAID_CLIENT_ID`
+- `PLAID_SECRET`
+- `PLAID_ENV` with `sandbox`, `development`, or `production`
+
+Then run:
+
+```bash
+cd backend
+./deploy.sh
+```
+
+The script prints `API_BASE_URL=...` when finished. Put that value into [`config.js`](../config.js).
+
+## Security note
+
+The current app uses a browser-generated `userId` because the frontend does not have authentication yet.
+That is enough for a private prototype, but it is not a secure multi-user design.
+If you keep building this, the next step is to add real auth and bind the backend records to the authenticated user.

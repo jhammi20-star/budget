@@ -3,9 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check functions/create-link-token.mjs && node --check functions/exchange-public-token.mjs && node --check functions/sync-transactions.mjs"
+    "check": "node --check src/handler.mjs"
   },
   "dependencies": {
-    "plaid": "^33.0.0"
+    "@aws-sdk/client-dynamodb": "^3.888.0",
+    "@aws-sdk/lib-dynamodb": "^3.888.0"
   }
 }

@@ -1,13 +1,17 @@
 const STORAGE_KEY = "budget-compass-state";
+const USER_ID_KEY = "budget-compass-user-id";
 const API_BASE_URL = window.BUDGET_API_BASE_URL || "";
+const USER_ID = getOrCreateUserId();
 
 const defaultState = {
   income: 0,
   integration: {
     connected: false,
     institutionName: "",
+    accessReady: false,
     lastSyncAt: "",
     linkTokenReady: false,
+    linkToken: "",
     syncError: "",
   },
   budgets: [
@@ -65,6 +69,7 @@ const budgetStatusList = document.querySelector("#budgetStatusList");
 const transactionList = document.querySelector("#transactionList");
 const statusTemplate = document.querySelector("#statusTemplate");
 const transactionTemplate = document.querySelector("#transactionTemplate");
+let plaidHandler = null;
 
 incomeInput.value = state.income || "";
 transactionDateInput.value = currentDateString();
@@ -165,6 +170,7 @@ syncTransactionsButton.addEventListener("click", async () => {
 });
 
 render();
+hydrateRemoteState();
 
 function render() {
   renderOverview();
@@ -208,7 +214,7 @@ function renderIntegration() {
   if (state.integration.linkTokenReady) {
     integrationStatusTitle.textContent = "Plaid Link ready";
     integrationStatusText.textContent =
-      "Your backend can now hand Plaid Link to the browser. Complete the public-token exchange before syncing.";
+      "Complete institution login to exchange the public token and enable sync.";
     return;
   }
 
@@ -327,7 +333,16 @@ function loadState() {
       return structuredClone(defaultState);
     }
 
-    return { ...structuredClone(defaultState), ...JSON.parse(saved) };
+    const parsed = JSON.parse(saved);
+
+    return {
+      ...structuredClone(defaultState),
+      ...parsed,
+      integration: {
+        ...structuredClone(defaultState).integration,
+        ...(parsed.integration || {}),
+      },
+    };
   } catch {
     return structuredClone(defaultState);
   }
@@ -408,9 +423,11 @@ async function handleConnectAccount() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Budget-User": USER_ID,
       },
       body: JSON.stringify({
         clientName: "Budget Compass",
+        userId: USER_ID,
       }),
     });
 
@@ -420,8 +437,11 @@ async function handleConnectAccount() {
 
     const data = await response.json();
     state.integration.linkTokenReady = Boolean(data.linkToken);
+    state.integration.linkToken = data.linkToken || "";
     state.integration.syncError = "";
     persistState();
+    initializePlaidLink(data.linkToken);
+    plaidHandler?.open();
     render();
   } catch (error) {
     state.integration.syncError =
@@ -445,6 +465,7 @@ async function handleSyncTransactions() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Budget-User": USER_ID,
       },
     });
 
@@ -453,15 +474,10 @@ async function handleSyncTransactions() {
     }
 
     const data = await response.json();
-    const imported = Array.isArray(data.added) ? data.added : [];
-
-    imported.reverse().forEach((transaction) => {
-      if (!state.transactions.some((item) => item.id === transaction.id)) {
-        state.transactions.unshift(transaction);
-      }
-    });
-
-    state.integration.lastSyncAt = new Date().toISOString();
+    mergeImportedTransactions(data.transactions || []);
+    state.integration.lastSyncAt = data.lastSyncAt || new Date().toISOString();
+    state.integration.connected = Boolean(data.connected);
+    state.integration.institutionName = data.institutionName || state.integration.institutionName;
     state.integration.syncError = "";
     persistState();
     render();
@@ -478,4 +494,113 @@ function emptyState(message) {
   element.className = "empty-state";
   element.textContent = message;
   return element;
+}
+
+async function hydrateRemoteState() {
+  if (!API_BASE_URL) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/plaid/state`, {
+      headers: {
+        "X-Budget-User": USER_ID,
+      },
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const data = await response.json();
+    state.integration.connected = Boolean(data.connected);
+    state.integration.institutionName = data.institutionName || "";
+    state.integration.lastSyncAt = data.lastSyncAt || "";
+    state.integration.accessReady = Boolean(data.connected);
+    mergeImportedTransactions(data.transactions || []);
+    persistState();
+    render();
+  } catch {
+    // Keep local mode if the backend is unreachable.
+  }
+}
+
+function initializePlaidLink(linkToken) {
+  if (!window.Plaid || !linkToken) {
+    throw new Error("Plaid Link is unavailable.");
+  }
+
+  plaidHandler = window.Plaid.create({
+    token: linkToken,
+    onSuccess: async (publicToken, metadata) => {
+      try {
+        await exchangePublicToken(publicToken, metadata);
+      } catch (error) {
+        state.integration.syncError =
+          error instanceof Error ? error.message : "Unable to complete account connection.";
+        persistState();
+        render();
+      }
+    },
+    onExit: (_error, metadata) => {
+      if (!state.integration.connected && metadata?.status !== "connected") {
+        state.integration.syncError = "Connection flow was closed before completion.";
+        persistState();
+        render();
+      }
+    },
+  });
+}
+
+async function exchangePublicToken(publicToken, metadata) {
+  const response = await fetch(`${API_BASE_URL}/api/plaid/exchange-public-token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Budget-User": USER_ID,
+    },
+    body: JSON.stringify({
+      publicToken,
+      institutionName: metadata?.institution?.name || "",
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Unable to complete account connection.");
+  }
+
+  const data = await response.json();
+  state.integration.connected = true;
+  state.integration.accessReady = true;
+  state.integration.linkTokenReady = false;
+  state.integration.linkToken = "";
+  state.integration.institutionName = data.institutionName || metadata?.institution?.name || "";
+  state.integration.syncError = "";
+  persistState();
+  render();
+  await handleSyncTransactions();
+}
+
+function mergeImportedTransactions(transactions) {
+  const localOnly = state.transactions.filter((transaction) => !transaction.id.startsWith("plaid_"));
+  const imported = transactions.map((transaction) => ({
+    ...transaction,
+    id: transaction.id.startsWith("plaid_") ? transaction.id : `plaid_${transaction.id}`,
+  }));
+
+  state.transactions = [...imported, ...localOnly]
+    .sort((left, right) => new Date(right.date) - new Date(left.date))
+    .slice(0, 250);
+}
+
+function getOrCreateUserId() {
+  const saved = localStorage.getItem(USER_ID_KEY);
+
+  if (saved) {
+    return saved;
+  }
+
+  const generated = crypto.randomUUID();
+  localStorage.setItem(USER_ID_KEY, generated);
+  return generated;
 }
