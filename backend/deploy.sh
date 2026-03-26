@@ -179,6 +179,11 @@ if [[ -z "${API_ID}" || "${API_ID}" == "None" ]]; then
     --protocol-type HTTP \
     --cors-configuration AllowOrigins='*',AllowHeaders='Authorization,Content-Type',AllowMethods='GET,POST,OPTIONS' \
     --query 'ApiId' --output text)"
+else
+  aws apigatewayv2 update-api \
+    --region "${REGION}" \
+    --api-id "${API_ID}" \
+    --cors-configuration AllowOrigins='*',AllowHeaders='Authorization,Content-Type',AllowMethods='GET,POST,OPTIONS' >/dev/null
 fi
 
 LAMBDA_ARN="$(aws lambda get-function --function-name "${FUNCTION_NAME}" --region "${REGION}" --query 'Configuration.FunctionArn' --output text)"
