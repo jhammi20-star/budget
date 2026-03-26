@@ -45,6 +45,10 @@ const budgetedValue = document.querySelector("#budgetedValue");
 const spentValue = document.querySelector("#spentValue");
 const remainingValue = document.querySelector("#remainingValue");
 const heroNet = document.querySelector("#heroNet");
+const monthLabel = document.querySelector("#monthLabel");
+const activeBudgetCount = document.querySelector("#activeBudgetCount");
+const transactionCount = document.querySelector("#transactionCount");
+const topCategoryValue = document.querySelector("#topCategoryValue");
 const budgetStatusList = document.querySelector("#budgetStatusList");
 const transactionList = document.querySelector("#transactionList");
 const statusTemplate = document.querySelector("#statusTemplate");
@@ -143,10 +147,18 @@ transactionList.addEventListener("click", (event) => {
 render();
 
 function render() {
+  renderOverview();
   renderCategoryOptions();
   renderSummary();
   renderStatusCards();
   renderTransactions();
+}
+
+function renderOverview() {
+  monthLabel.textContent = currentMonthLabel();
+  activeBudgetCount.textContent = String(state.budgets.length);
+  transactionCount.textContent = String(state.transactions.length);
+  topCategoryValue.textContent = topSpendingCategoryLabel();
 }
 
 function renderCategoryOptions() {
@@ -289,6 +301,30 @@ function formatDisplayDate(dateString) {
 
 function currentDateString() {
   return new Date().toISOString().split("T")[0];
+}
+
+function currentMonthLabel() {
+  return new Date().toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function topSpendingCategoryLabel() {
+  if (state.transactions.length === 0) {
+    return "None yet";
+  }
+
+  const totalsByCategory = state.transactions.reduce((totals, transaction) => {
+    totals[transaction.category] = (totals[transaction.category] || 0) + transaction.amount;
+    return totals;
+  }, {});
+
+  const [category, total] = Object.entries(totalsByCategory).sort((left, right) => {
+    return right[1] - left[1];
+  })[0];
+
+  return `${category} ${formatCurrency(total)}`;
 }
 
 function emptyState(message) {

@@ -14,24 +14,47 @@
   </head>
   <body>
     <div class="page-shell">
+      <div class="topbar">
+        <div>
+          <p class="eyebrow">Budget Compass</p>
+          <p class="topbar-title">Personal cash flow dashboard</p>
+        </div>
+        <p class="topbar-note">Private by default. Data stays in this browser.</p>
+      </div>
+
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Household Budget Hub</p>
+          <p class="eyebrow">Monthly control panel</p>
+          <p id="monthLabel" class="month-pill">This month</p>
           <h1>Keep spending visible before it turns into drift.</h1>
           <p class="hero-text">
-            Track income, plan category limits, and log transactions in one
-            place. Everything is saved in your browser.
+            Plan the month, watch category pressure build in real time, and
+            keep your spending decisions grounded before they compound.
           </p>
         </div>
         <div class="hero-panel">
           <div class="hero-metric">
-            <span>Monthly plan</span>
+            <span>Operating balance</span>
             <strong id="heroNet">$0.00</strong>
           </div>
           <p>
             Positive means the current budget still has room. Negative means the
             plan is overspent.
           </p>
+          <div class="hero-facts">
+            <article class="hero-fact">
+              <span>Active budgets</span>
+              <strong id="activeBudgetCount">0</strong>
+            </article>
+            <article class="hero-fact">
+              <span>Transactions</span>
+              <strong id="transactionCount">0</strong>
+            </article>
+            <article class="hero-fact">
+              <span>Top spend</span>
+              <strong id="topCategoryValue">None yet</strong>
+            </article>
+          </div>
         </div>
       </header>
 
@@ -41,6 +64,7 @@
             <div>
               <p class="eyebrow">Setup</p>
               <h2>Monthly income</h2>
+              <p class="section-text">Define the amount you actually have available to plan with.</p>
             </div>
           </div>
           <form id="incomeForm" class="stack">
@@ -64,6 +88,7 @@
             <div>
               <p class="eyebrow">Snapshot</p>
               <h2>This month</h2>
+              <p class="section-text">A fast read on plan size, actual spend, and cash still available.</p>
             </div>
           </div>
           <div class="summary-grid">
@@ -91,6 +116,7 @@
             <div>
               <p class="eyebrow">Plan</p>
               <h2>Category budgets</h2>
+              <p class="section-text">Set spending boundaries before transactions start piling up.</p>
             </div>
           </div>
           <form id="budgetForm" class="stack">
@@ -118,6 +144,7 @@
             <div>
               <p class="eyebrow">Track</p>
               <h2>Transactions</h2>
+              <p class="section-text">Log what happened against the category it should pressure.</p>
             </div>
           </div>
           <form id="transactionForm" class="stack">
@@ -154,6 +181,7 @@
             <div>
               <p class="eyebrow">Progress</p>
               <h2>Budget status by category</h2>
+              <p class="section-text">See which categories are stable, close to the line, or already over it.</p>
             </div>
           </div>
           <div id="budgetStatusList" class="status-list"></div>
@@ -164,6 +192,7 @@
             <div>
               <p class="eyebrow">Activity</p>
               <h2>Recent transactions</h2>
+              <p class="section-text">A chronological feed of spending updates for the current budget.</p>
             </div>
           </div>
           <div id="transactionList" class="transaction-list"></div>
