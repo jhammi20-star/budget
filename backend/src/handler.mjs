@@ -22,6 +22,7 @@ const cognitoIssuer = cognitoRegion && cognitoUserPoolId
   ? `https://cognito-idp.${cognitoRegion}.amazonaws.com/${cognitoUserPoolId}`
   : "";
 const jwks = cognitoIssuer ? createRemoteJWKSet(new URL(`${cognitoIssuer}/.well-known/jwks.json`)) : null;
+const sharedWorkspaceId = process.env.SHARED_WORKSPACE_ID || "WORKSPACE#public";
 let plaidConfigCache = null;
 
 export async function handler(event) {
@@ -35,6 +36,14 @@ export async function handler(event) {
   try {
     if (path === "/api/plaid/state" && method === "GET") {
       return await getState(event);
+    }
+
+    if (path === "/api/shared-budget" && method === "GET") {
+      return await getSharedBudgetState();
+    }
+
+    if (path === "/api/shared-budget" && method === "PUT") {
+      return await saveSharedBudgetState(event);
     }
 
     if (path === "/api/plaid/link-token" && method === "POST") {
@@ -68,6 +77,51 @@ async function getState(event) {
     institutionName: profile?.institutionName || "",
     lastSyncAt: profile?.lastSyncAt || "",
     transactions,
+  });
+}
+
+async function getSharedBudgetState() {
+  const response = await db.send(
+    new GetCommand({
+      TableName: tableName,
+      Key: {
+        userId: sharedWorkspaceId,
+        sk: "BUDGET_STATE",
+      },
+    }),
+  );
+
+  const item = response.Item || {};
+
+  return jsonResponse(200, {
+    income: Number.isFinite(item.income) ? item.income : 0,
+    budgets: Array.isArray(item.budgets) ? item.budgets : [],
+    transactions: Array.isArray(item.transactions) ? item.transactions : [],
+    updatedAt: item.updatedAt || "",
+  });
+}
+
+async function saveSharedBudgetState(event) {
+  const body = readJsonBody(event);
+  const now = new Date().toISOString();
+  const item = {
+    userId: sharedWorkspaceId,
+    sk: "BUDGET_STATE",
+    income: Number.isFinite(body.income) ? body.income : 0,
+    budgets: sanitizeBudgets(body.budgets),
+    transactions: sanitizeTransactions(body.transactions),
+    updatedAt: now,
+  };
+
+  await db.send(
+    new PutCommand({
+      TableName: tableName,
+      Item: item,
+    }),
+  );
+
+  return jsonResponse(200, {
+    updatedAt: now,
   });
 }
 
@@ -375,6 +429,42 @@ function chunked(items, size) {
   }
 
   return chunks;
+}
+
+function sanitizeBudgets(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item) => item && typeof item.category === "string")
+    .map((item) => ({
+      id: String(item.id || crypto.randomUUID()),
+      category: item.category.trim(),
+      limit: Number.isFinite(item.limit) ? item.limit : 0,
+    }))
+    .filter((item) => item.category && item.limit >= 0);
+}
+
+function sanitizeTransactions(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item) => item && typeof item.description === "string" && typeof item.category === "string")
+    .map((item) => ({
+      id: String(item.id || crypto.randomUUID()),
+      description: item.description.trim(),
+      category: item.category.trim(),
+      amount: Number.isFinite(item.amount) ? item.amount : 0,
+      date: typeof item.date === "string" ? item.date : currentDateString(),
+    }))
+    .filter((item) => item.description && item.category && item.amount >= 0);
+}
+
+function currentDateString() {
+  return new Date().toISOString().split("T")[0];
 }
 
 function jsonResponse(statusCode, body) {

@@ -83,6 +83,7 @@ incomeForm.addEventListener("submit", (event) => {
   state.income = parseCurrency(incomeInput.value);
   persistState();
   render();
+  void syncSharedBudgetState();
 });
 
 budgetForm.addEventListener("submit", (event) => {
@@ -107,6 +108,7 @@ budgetForm.addEventListener("submit", (event) => {
   budgetForm.reset();
   persistState();
   render();
+  void syncSharedBudgetState();
 });
 
 transactionForm.addEventListener("submit", (event) => {
@@ -133,6 +135,7 @@ transactionForm.addEventListener("submit", (event) => {
   transactionDateInput.value = currentDateString();
   persistState();
   render();
+  void syncSharedBudgetState();
 });
 
 budgetStatusList.addEventListener("click", (event) => {
@@ -163,6 +166,7 @@ budgetStatusList.addEventListener("click", (event) => {
   });
   persistState();
   render();
+  void syncSharedBudgetState();
 });
 
 budgetStatusList.addEventListener("submit", (event) => {
@@ -196,6 +200,7 @@ transactionList.addEventListener("click", (event) => {
   state.transactions = state.transactions.filter((transaction) => transaction.id !== id);
   persistState();
   render();
+  void syncSharedBudgetState();
 });
 
 connectAccountButton.addEventListener("click", async () => {
@@ -217,6 +222,7 @@ authButton.addEventListener("click", async () => {
 
 consumeAuthRedirect();
 render();
+hydrateSharedBudgetState();
 hydrateRemoteState();
 
 function render() {
@@ -643,6 +649,7 @@ function saveBudgetEdits(budgetId, nextCategoryValue, nextLimitValue) {
 
   persistState();
   render();
+  void syncSharedBudgetState();
 }
 
 async function hydrateRemoteState() {
@@ -672,6 +679,63 @@ async function hydrateRemoteState() {
   } catch {
     // Keep local mode if the backend is unreachable.
   }
+}
+
+async function hydrateSharedBudgetState() {
+  if (!API_BASE_URL) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/shared-budget`);
+
+    if (!response.ok) {
+      return;
+    }
+
+    const data = await response.json();
+    applySharedBudgetState(data);
+    persistState();
+    render();
+  } catch {
+    // Keep local cache if the shared state endpoint is unavailable.
+  }
+}
+
+async function syncSharedBudgetState() {
+  if (!API_BASE_URL) {
+    return;
+  }
+
+  try {
+    await fetch(`${API_BASE_URL}/api/shared-budget`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        income: state.income,
+        budgets: state.budgets,
+        transactions: sharedTransactions(),
+      }),
+    });
+  } catch {
+    // Keep local cache if the shared state endpoint is unavailable.
+  }
+}
+
+function applySharedBudgetState(data) {
+  if (!data || typeof data !== "object") {
+    return;
+  }
+
+  const imported = importedTransactions();
+  state.income = Number.isFinite(data.income) ? data.income : state.income;
+  state.budgets = Array.isArray(data.budgets) ? data.budgets : state.budgets;
+  state.transactions = [
+    ...(Array.isArray(data.transactions) ? data.transactions : []),
+    ...imported,
+  ].sort((left, right) => new Date(right.date) - new Date(left.date));
 }
 
 function initializePlaidLink(linkToken) {
@@ -731,7 +795,7 @@ async function exchangePublicToken(publicToken, metadata) {
 }
 
 function mergeImportedTransactions(transactions) {
-  const localOnly = state.transactions.filter((transaction) => !transaction.id.startsWith("plaid_"));
+  const localOnly = sharedTransactions();
   const imported = transactions.map((transaction) => ({
     ...transaction,
     id: transaction.id.startsWith("plaid_") ? transaction.id : `plaid_${transaction.id}`,
@@ -740,6 +804,14 @@ function mergeImportedTransactions(transactions) {
   state.transactions = [...imported, ...localOnly]
     .sort((left, right) => new Date(right.date) - new Date(left.date))
     .slice(0, 250);
+}
+
+function sharedTransactions() {
+  return state.transactions.filter((transaction) => !transaction.id.startsWith("plaid_"));
+}
+
+function importedTransactions() {
+  return state.transactions.filter((transaction) => transaction.id.startsWith("plaid_"));
 }
 
 function loadAuthSession() {

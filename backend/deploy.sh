@@ -198,7 +198,7 @@ if [[ -z "${INTEGRATION_ID}" || "${INTEGRATION_ID}" == "None" ]]; then
     --query 'IntegrationId' --output text)"
 fi
 
-for route in "GET /api/plaid/state" "POST /api/plaid/link-token" "POST /api/plaid/exchange-public-token" "POST /api/plaid/sync" "OPTIONS /api/{proxy+}"; do
+for route in "GET /api/shared-budget" "PUT /api/shared-budget" "GET /api/plaid/state" "POST /api/plaid/link-token" "POST /api/plaid/exchange-public-token" "POST /api/plaid/sync" "OPTIONS /api/{proxy+}"; do
   ROUTE_EXISTS="$(aws apigatewayv2 get-routes --api-id "${API_ID}" --region "${REGION}" --query "Items[?RouteKey=='${route}'].RouteId | [0]" --output text)"
   if [[ -z "${ROUTE_EXISTS}" || "${ROUTE_EXISTS}" == "None" ]]; then
     aws apigatewayv2 create-route \
